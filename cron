@@ -1,0 +1,1 @@
+*/10 * * * * root /usr/local/bin/afraid-dyndns --quiet home.krnjevic.com

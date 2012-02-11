@@ -1,0 +1,11 @@
+#!/bin/sh
+
+# Hacked out MacOSX stuff - will only run on CentOS  (pk 1202)
+
+install -Dpm 0755 afraid-dyndns /usr/local/bin/afraid-dyndns
+install -DCm 0644 cron /etc/cron.d/afraid-dyndns
+install -DCm 0644 conf /etc/afraid-dyndns.conf
+install -dpm 0755 /var/cache/afraid-dyndns
+touch /var/cache/afraid-dyndns/IP
+
+echo "* Don't forget to configure the AccountHash (see README) *"

@@ -1,0 +1,3 @@
+AccountHash = enter your freedns account hash here
+Notify = root@localhost # leave empty to suppress notifications
+CacheFile = /var/cache/afraid-dyndns/IP
