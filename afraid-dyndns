@@ -2,6 +2,7 @@
 
 #
 #   afraid-dyndns - a Dynamic DNS client for the afraid.org free service
+#   This version tweaked 2012 by Peter Krnjevic - will likely only work on Linux
 #   Copyright (C) 2009 Erick Calder
 #
 #   This program is free software; you can redistribute it and/or modify
@@ -18,7 +19,14 @@
 #   along with this program; if not, write to the Free Software
 #   Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 #
-
+#==============================================================================
+# Changes in this release:
+# 1. using whatismyip.org to determine external IP
+# 2. accept multiple hostnames - i don't want all hosts pointing here
+# 3. stripped a bunch of Windows/Mac code that I don't need or want
+# 4. some minor refactoring to make code a bit more readable
+#
+#==============================================================================
 $|++;
 $\ = $/;
 
@@ -38,7 +46,7 @@ if ($ARGV{help}) {
 	echo("    quiet: supresses all output");
 	echo("    debug: generates feedback on internal workings");
 	echo("    help: displays syntax");
-	echo("    hostname: indicates that only the specified name should be refreshed");
+	echo("    hostname(s): one or more hostnames to update; no names == update all hostnames.");
 	exit;
 	}
 
@@ -48,9 +56,10 @@ $afraid = "http://freedns.afraid.org/api/?action=getdyndns&sha=%s&style=xml";
 ($VER = substr q$Revision: 2342 $, 10) =~ s/\s+$//;
 $CONF = "/etc/afraid-dyndns.conf";
 ($ME = $0) =~ s|.*/||;
-$hostname = shift;
+@hostnames = @ARGV;
+@hostnames{@hostnames}=();
 
-# get working parameters
+# get command line parameters
 
 for (readfile($CONF)) {
 	chomp;
@@ -70,12 +79,6 @@ echo("Notifications: " . $ARGV{Notify} || "None");
 # get external and cached IP addresses
 #
 
-#$xml = get("http://ip-address.domaintools.com/myip.xml");
-#die "Failed fetching IP address!" unless $xml;
-
-#$o = XMLin($xml);
-#$extip = $o->{ip_address};				# external address
-
 $extip = get("http://whatismyip.org");			# external address
 $intip = readfile($ARGV{CacheFile});	# internal address (cached)
 chomp $intip;
@@ -84,43 +87,64 @@ chomp $intip;
 # when these differ modify the DNS, cache the address and e-mail
 #
 
+debug("are these equal? $extip == $intip");
 if ($extip eq $intip) {
 	echo("No change in address!");
+} elsif ($extip == '') {
+	send_mail(
+		"Failed to retrieve external IP",
+		"Dynamic DNS remains unchanged\nExternal IP should still be $intip"
+		);
+
 } else {
 	echo("Address changed: $intip => $extip");
 	$xml = get(sprintf($afraid, $ARGV{AccountHash}));
 	die "Failed fetching update head!" unless $xml;
 	$o = XMLin($xml);
 	for (@{$o->{item}}) {
-		next if $hostname && $_->{host} !~ /$hostname/;
+		next if not in_hostname_list($_->{host}); 
 		debug("- $_->{host}");
 		get($_->{url}) unless $ARGV{debug};
 		}
 	writefile($ARGV{CacheFile}, $extip);
+	send_mail(
+		"IP address change",
+		"Dynamic DNS has been updated\nIP changed from $intip to $extip"
+		);
+	}
+exit;
 
-	if ($ARGV{Notify}) {
-		eval {
-			require MIME::Lite;
-			import MIME::Lite;
-		};
-		if ($@) {
-			local $_ = "Notifications cannot be made without MIME::Lite";
-			$_ .= " - to enable please have your system administrator";
-			$_ .= " install that perl module";
-			echo();
-			}
-		else {
-			$msg = MIME::Lite->new(
-				To => $ARGV{Notify},
-				Subject => "IP address change",
-				Data => "Dynamic DNS has been refreshed"
-				);
-			$msg->send();
-			}
+
+sub in_hostname_list {
+        local ($host) = @_;
+        return 1 if not @hostnames;
+        return exists $hostnames{$host};
+        }
+
+
+sub send_mail {
+	local ($subject, $message) = @_;
+	return 1 if (not $ARGV{Notify});
+	eval {
+		require MIME::Lite;
+		import MIME::Lite;
+	};
+	if ($@) {
+		local $_ = "Notifications cannot be made without MIME::Lite";
+		$_ .= " - to enable please have your system administrator";
+		$_ .= " install that perl module";
+		echo();
+		}
+	else {
+		$msg = MIME::Lite->new(
+			To => $ARGV{Notify},
+			Subject => $subject,
+			Data => $message
+			);
+		$msg->send();
 		}
 	}
 
-exit;
 
 #
 #   Syntax:
